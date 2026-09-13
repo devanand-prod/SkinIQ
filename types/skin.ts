@@ -41,9 +41,10 @@ export interface Highlight {
 
 /**
  * How a scan's scores were produced:
- * - 'model'     both on-device models ran successfully
- * - 'partial'   one model ran, the other fell back to a flat heuristic
- * - 'heuristic' both models failed/unavailable — every score is a placeholder
+ * - 'model'     the photo decoded fine (classical-CV signals are real) and
+ *               the acne detector ran (darkSpots is real)
+ * - 'partial'   only one of those two succeeded
+ * - 'heuristic' both failed — every score is a flat placeholder
  */
 export type AnalysisSource = 'model' | 'partial' | 'heuristic';
 
@@ -57,8 +58,9 @@ export interface ScanRecord {
   highlights?: Highlight[];
   source?: AnalysisSource;
   /** Present only when source !== 'model' — the raw error from whichever
-   * model failed, kept so a failure is diagnosable from the device itself. */
-  errors?: { signals?: string; acne?: string };
+   * part of the pipeline failed, kept so a failure is diagnosable from the
+   * device itself. */
+  errors?: { photoDecode?: string; acne?: string };
 }
 
 export function tierForScore(score: number): Tier {

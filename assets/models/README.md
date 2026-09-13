@@ -1,21 +1,38 @@
 # Model weights
 
-Both files are committed here (~44MB combined, well under GitHub's limits):
+Only one model is used now:
 
-- `skin_signals.onnx` — EfficientNet-B0, ~0.6MB
-- `acne_detector.onnx` — YOLOv8s, ~43MB
+- `acne_detector.onnx` — YOLOv8s, ~43MB (numClasses=1, confirmed from the
+  real output shape [1,5,8400])
 
 Source (MIT-licensed): https://huggingface.co/mufasabrownie/glowlytics-skin-models
 
-`constants/models.ts` references these by static `require()` path — Metro
-needs them present at bundle time. If you ever need to re-download them:
-
+Re-download if needed:
 ```
-curl -L -o skin_signals.onnx https://huggingface.co/mufasabrownie/glowlytics-skin-models/resolve/main/skin_signals.onnx
 curl -L -o acne_detector.onnx https://huggingface.co/mufasabrownie/glowlytics-skin-models/resolve/main/acne_detector.onnx
 ```
 
-Note: committing binary model weights to git means every clone downloads
-this ~44MB, and any future model update adds another copy to history
-rather than replacing it. If that becomes a problem, consider moving these
-to Git LFS.
+## Why there's only one model here
+
+The repo's combined `skin_signals.onnx` (structure/hydration/sunDamage/
+elasticity in one export) is broken as published — it references external
+weight data (`skin_signals.onnx.data`) that was never uploaded to the repo,
+confirmed by inspecting the file's raw protobuf bytes. Without it, ONNX
+Runtime can't load the model at all (fails on the very first conv layer).
+
+The repo's separate `structure_model.onnx` loads and runs fine, but its
+outputs (`pore_count`, `texture_regularity`, `structure_score`) are raw,
+uncalibrated regression values with no documented scale — tested with
+`onnxruntime-node` against synthetic inputs and got results ranging from
+-25 to +245. Using them as a 0-100 score would mean inventing a
+calibration with no ground truth to check it against.
+
+`hydration_model.onnx` and `elasticity_model.onnx` additionally require an
+undocumented "handcrafted_features" input (44-dim and 14-dim respectively)
+with no spec for what those features are.
+
+So `texture`, `pores`, `hydration`, and `discoloration` are computed by
+classical-CV pixel math instead (see the doc comments in
+`lib/analysis/texture.ts`, `pores.ts`, `hydration.ts`, `discoloration.ts`) —
+real per-photo computation, just not a trained model. Only `darkSpots`
+(via the acne detector) is ML-based.

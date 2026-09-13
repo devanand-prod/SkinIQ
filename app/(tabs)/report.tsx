@@ -61,9 +61,9 @@ export default function ReportScreen() {
                 </Text>
                 {/* TODO: temporary diagnostic while wiring up the model pipeline —
                     remove once on-device inference is confirmed reliable. */}
-                {latest.errors?.signals && (
+                {latest.errors?.photoDecode && (
                   <Text style={{ fontFamily: fonts.ui, color: colors.clay, fontSize: 11, marginTop: 8 }}>
-                    skin-signals: {latest.errors.signals}
+                    photo decode: {latest.errors.photoDecode}
                   </Text>
                 )}
                 {latest.errors?.acne && (

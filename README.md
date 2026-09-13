@@ -15,8 +15,8 @@ npm install
 ```
 
 **Model weights required first** — see `assets/models/README.md`. Without
-`skin_signals.onnx` and `acne_detector.onnx` in place, the app fails to
-bundle at all (Metro can't resolve the `require()`s in `constants/models.ts`).
+`acne_detector.onnx` in place, the app fails to bundle at all (Metro can't
+resolve the `require()` in `constants/models.ts`).
 
 **Expo Go no longer works for this app.** Adding `onnxruntime-react-native`
 (a native module) means the JS-only Expo Go client can't load it — you need
@@ -58,109 +58,110 @@ or an EAS build (`npm run build:preview`).
   loaded in `app/_layout.tsx` via `expo-font`, so headline/UI type actually
   renders out of the box.
 
-## On-device model pipeline (new)
+## On-device analysis pipeline
 
-Real inference replaces the old flat-70 stub, split across:
+Only **darkSpots** is a real ML model. The other four conditions are real
+classical-CV pixel math, not a model — see "why only one model" below for
+why that's the honest end state given what's actually available upstream.
 
-- `constants/models.ts` — model asset refs + fixed hyperparameters
-  (input sizes, ImageNet mean/std, confidence 0.25, IoU 0.45) as named
-  constants, plus the condition-mapping note (see below).
-- `lib/analysis/imagePreprocessing.ts` — resize-short-side + center-crop
-  for the signals model; YOLO letterbox (scale-to-fit + mid-gray pad) for
-  the detector; JPEG→RGBA decode via `jpeg-js`; RGBA→CHW `Float32Array`
-  packing. There's no Canvas/ImageData API in RN, so the letterbox pad is
-  done as a direct buffer copy in JS (onto a pre-filled mid-gray buffer)
-  rather than via GPU compositing — `expo-gl` is still a dependency per the
-  task brief, but this pipeline doesn't end up calling it, since the buffer
-  copy is simpler and equally correct at 640x640.
+- `constants/models.ts` — the acne detector's asset ref + hyperparameters
+  (confidence 0.25, IoU 0.45, numClasses 1) as named constants, plus a
+  detailed note on why the other signals aren't ML-based.
+- `lib/analysis/imagePreprocessing.ts` — YOLO letterbox (scale-to-fit +
+  mid-gray pad) for the detector; a resize+center-crop decode shared by the
+  four classical-CV functions; JPEG→RGBA decode via `jpeg-js`; RGBA→CHW
+  `Float32Array` packing for the detector's tensor. No Canvas/ImageData API
+  in RN, so the letterbox pad is a direct buffer copy in JS onto a
+  pre-filled mid-gray buffer rather than GPU compositing.
 - `lib/analysis/nms.ts` — defensive sigmoid + IoU + greedy per-class NMS.
-- `lib/analysis/skinSignals.ts` / `acneDetector.ts` — the two model runners,
-  reading input/output tensor names off the session at runtime rather than
-  hardcoding guessed names (we don't have the real model files to inspect).
-- `lib/analysis/session.ts` — caches one `InferenceSession` per model via
+- `lib/analysis/acneDetector.ts` — the one real model runner, reading
+  input/output tensor names off the session at runtime rather than
+  hardcoding guessed names.
+- `lib/analysis/session.ts` — caches the `InferenceSession` via
   `expo-asset`.
-- `lib/analysis/index.ts` — orchestrates both models independently
-  (`Promise.allSettled`, one failing doesn't block the other), maps their
-  output onto the 5 UI conditions, and returns
-  `{ scores, highlights, source }` where `source` is `'model' | 'partial' |
-  'heuristic'` depending on which models actually ran. `report.tsx` shows a
-  banner (copy in `constants/copy.ts`'s `analysisSourceCopy`) whenever it's
-  not `'model'`, so a fallback is never presented as a real analysis.
-- `components/PhotoHighlightOverlay.tsx` (new) — draws acne/lesion detection
-  boxes over the captured photo on the report screen; renders nothing for
-  `undefined` (detector didn't run) same as for `[]` (ran, zero boxes) —
-  visually identical, but `report.tsx` and `ScanRecord.highlights` keep the
-  two states distinguishable in the data itself.
-- **Condition mapping is many-to-one, not 1:1** (documented in
-  `constants/models.ts` and `lib/analysis/index.ts`): `darkSpots` comes from
-  the acne detector's box count/confidence; `discoloration` from
-  `sunDamage`; `texture` **and** `pores` both read the same `structure`
-  signal (the model bundles them together); `hydration` is its own signal;
-  `overall` averages all 5.
-- The original heuristic stubs (`texture.ts`, `darkSpots.ts`,
-  `discoloration.ts`, `hydration.ts`, `pores.ts`, all still flat `70`) are
-  kept as-is and now serve as the fallback path when a model fails —
-  they're what `source: 'heuristic'` or `'partial'` actually falls back to.
+- `lib/analysis/texture.ts` / `pores.ts` / `hydration.ts` /
+  `discoloration.ts` — real classical-CV algorithms (block-local luminance
+  variance, gradient-magnitude, specular-highlight ratio, hue-variance
+  respectively), each with a doc comment flagging that its score-scale
+  constants are reasonable defaults, not calibrated against labeled photos.
+- `lib/analysis/index.ts` — decodes the photo once, runs the four
+  classical-CV functions against it and the acne detector independently
+  (`Promise.allSettled` — one failing doesn't block the other), and
+  returns `{ scores, highlights, source, errors }`. `source` is
+  `'model' | 'partial' | 'heuristic'` depending on whether photo-decode and
+  the acne detector both succeeded; `errors` carries the actual failure
+  message(s) so a bad run is diagnosable from the device itself (shown in
+  `report.tsx`'s banner) without needing adb/logcat.
+- `components/PhotoHighlightOverlay.tsx` — draws acne/lesion detection
+  boxes over the captured photo; renders nothing for `undefined` (detector
+  didn't run) same as for `[]` (ran, zero boxes) — visually identical, but
+  `ScanRecord.highlights` keeps the two states distinguishable in the data.
 
-### What's verified vs. what isn't
+### Why only one model — what actually happened wiring this up
 
-**I could not run any of this on a device or emulator in this session** —
-this sandboxed environment has no Android SDK, no `adb`, and no Xcode/iOS
-simulator (confirmed by actually running `expo run:android`, not assumed:
-it failed on `Failed to resolve the Android SDK path` / `spawn adb ENOENT`).
-It also has no network access to huggingface.co (org egress policy, a `403`
-confirmed via the proxy status, not a transient error), so the real model
-files were never available in this session either — `assets/models/` only
-has a README telling you where to get them.
+This was built through several real EAS builds installed on a physical
+Android device, not just static review. In order, what broke and what the
+device logs actually said:
 
-What I *did* verify, and how:
-- **Types**: `npx tsc --noEmit` passes cleanly with zero errors against the
-  full new pipeline.
-- **Bundling**: `npx expo export` gets through Metro dependency resolution
-  for all 1145 modules and fails at exactly one place — the two missing
-  `.onnx` `require()`s in `constants/models.ts` — confirming everything
-  else (new deps, new files, `metro.config.js`'s added `onnx` asset
-  extension) resolves correctly.
-- **Native linking**: `npx expo prebuild` succeeds and `npx react-native
-  config` shows `onnxruntime-react-native` correctly autolinked (iOS
-  podspec + Android) — not just "added to package.json".
-- **API surface**: I read the actual installed `.d.ts` files for
-  `onnxruntime-react-native`/`onnxruntime-common`, `expo-asset`,
-  `expo-file-system`, `expo-image-manipulator`, and `jpeg-js` in
-  `node_modules` rather than assuming their signatures from memory, and
-  matched every call site to them.
-- **Pipeline math, numerically**: since the RN-native pieces (file system,
-  image manipulator) can't run under plain Node, I extracted and ran the
-  *actual* pure-logic functions from the real source files (not
-  reimplementations) under Node with `--experimental-strip-types`:
-  - NMS/sigmoid against synthetic overlapping boxes — correct suppression,
-    correct per-class independence.
-  - Letterbox scale/pad/box-remap math — a full-frame box round-trips to
-    exactly `[0,0,1,1]`; an off-center box lands where hand-calculated.
-  - RGBA→CHW packing, plain and ImageNet-normalized — matches hand-computed
-    values.
-  - **This caught a real bug**: my hand-rolled base64 decoder (written to
-    avoid a dependency, since Hermes doesn't reliably have `atob`/`Buffer`)
-    had `c >> 6` instead of `c >> 2` for the middle byte of each 4-character
-    group — it silently dropped 2 bits from roughly every third decoded
-    byte. Every JPEG this touched would have decoded as visual garbage.
-    Fixed and re-verified against `Buffer`-based ground truth across 8
-    lengths including padding edge cases.
+1. **`android.minSdkVersion` in `app.json` was silently ignored.** Gradle
+   failed at the manifest-merger step: `onnxruntime-android:1.29.0`
+   requires minSdk 24, but the generated project was still at 23. That
+   `app.json` field is deprecated in current Expo prebuild — fixed via the
+   `expo-build-properties` config plugin instead.
+2. **The combined `skin_signals.onnx` doesn't load at all.** The real
+   device error: `External data path validation failed for initializer:
+   backbone.conv_stem.weight ... does not exist:
+   ".../skin_signals.onnx.data"`. Inspecting the file's raw protobuf bytes
+   confirmed one initializer was exported with external data whose
+   companion file was never published to the Hugging Face repo — this
+   model can never load for anyone, not just us.
+3. **The acne detector's real output shape is `[1, 5, 8400]`**, not the
+   assumed `[1, 8, 8400]` — meaning 1 class, not 4. Fixed
+   `numClasses: 4 → 1`.
+4. **Investigated whether the repo's separate `structure_model.onnx` could
+   replace the broken combined model.** It loads fine, but running it (via
+   `onnxruntime-node`, with synthetic inputs) produced raw, unbounded
+   outputs (-25 to +245, no [0,1] range) with no documented scale —
+   unusable as a score without invented calibration.
+   `hydration_model.onnx`/`elasticity_model.onnx` additionally need an
+   undocumented "handcrafted_features" input. None of the three were used.
+5. Given (2) and (4), `texture`/`pores`/`hydration`/`discoloration` were
+   reimplemented as classical-CV (the original web prototype's actual
+   algorithms), since that's real and honest where an uncalibrated or
+   broken model would not be.
 
-What is **implemented but genuinely unverified**, because none of it can
-run without a device/emulator and the real model files:
-- Whether `onnxruntime-react-native`'s actual native inference call behaves
-  as the type signatures suggest at runtime.
-- The two models' real input/output tensor names, dims, and whether
-  `dims[1]`/`dims[2]` detection correctly identifies the acne detector's
-  actual export layout (`[1, attrs, N]` vs `[1, N, attrs]`) — I don't have
-  the file to inspect.
-- Whether the acne detector's raw output values are pre- or
-  post-sigmoid in practice (handled defensively, but untested against the
-  real model).
-- End-to-end timing/memory on an actual phone (a 43MB YOLOv8s model plus a
-  640x640 JS-side letterbox buffer copy could be slow on lower-end
-  hardware — nothing in this pipeline was profiled).
+### What's verified, and how
+
+- **Types**: `npx tsc --noEmit` passes cleanly at every step.
+- **Bundling**: `npx expo export` resolves the full dependency graph.
+- **Native linking**: `npx expo prebuild` + `npx react-native config` show
+  `onnxruntime-react-native` correctly autolinked.
+- **API surface**: matched every call site against the actual installed
+  `.d.ts` files, not memory.
+- **Pipeline math, numerically**: NMS/sigmoid, letterbox scale/pad/box-remap
+  round-tripping, RGBA→CHW packing, and all four classical-CV functions
+  were run against synthetic test buffers with known expected results
+  (uniform images → 100, high-frequency/noisy synthetic images → clamped
+  low) using the actual source files under Node
+  (`--experimental-strip-types`), not reimplementations. This caught two
+  real bugs before they ever reached a device: a base64 decoder bit-shift
+  error (`c >> 6` instead of `c >> 2`, silently corrupting ~1/3 of decoded
+  bytes) and the acne detector's class-count assumption.
+- **On-device, for real**: multiple full EAS builds installed on a
+  physical Android device, iterating against actual runtime errors (not
+  simulated) until the pipeline ran end-to-end.
+
+### Still open
+
+- The classical-CV score-scale constants (e.g. hydration's specular-ratio
+  ceiling, texture's block-variance ceiling) are reasonable defaults, not
+  calibrated against any labeled dataset — expect them to need tuning once
+  tested against a range of real photos.
+- No labeled test set exists to validate the acne detector's real
+  precision/recall, or whether its raw scores are pre- or post-sigmoid in
+  practice (handled defensively either way, but unconfirmed).
+- End-to-end performance (a 43MB model load + 640x640 tensor packing) on
+  lower-end devices hasn't been profiled.
 
 ## What's still just placeholder copy
 
@@ -180,14 +181,10 @@ run without a device/emulator and the real model files:
 - **App icons/splash** — done. `assets/icons/icon.png`, `adaptive-icon.png`,
   and `splash.png` are simple generated placeholders (an accent-colored
   mark), not final branding — swap them for real assets whenever ready.
-- **Model weights** — not done, see above and `assets/models/README.md`.
-  This blocks bundling entirely, not just inference quality.
-- **Bundle identifiers** — `app.json`'s `ios.bundleIdentifier` and
-  `android.package` are both placeholder (`com.yourcompany.skiniq`).
-  Change before building for a device or app store.
-- **EAS project ID** — set via `eas init --id <id>` already if you've run
-  that; if `extra.eas.projectId` in `app.json` still says
-  `YOUR_EAS_PROJECT_ID`, run it before `eas build`.
+- **Model weights** — done, `acne_detector.onnx` is committed (see
+  `assets/models/README.md`).
+- **Bundle identifiers / EAS project ID** — done (`com.devanand.skiniq`,
+  real project ID set in `app.json`).
 - **Camera/photo permissions** — already filled in and should work as-is:
   - iOS: `NSCameraUsageDescription`, `NSPhotoLibraryUsageDescription`,
     `NSPhotoLibraryAddUsageDescription` in `app.json`'s `ios.infoPlist`.

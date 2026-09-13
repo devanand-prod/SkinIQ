@@ -3,8 +3,8 @@ import { runAcneDetector } from './acneDetector';
 import { scoreDarkSpots } from './darkSpots';
 import { scoreDiscoloration } from './discoloration';
 import { scoreHydration } from './hydration';
+import { resizeAndCenterCrop } from './imagePreprocessing';
 import { scorePores } from './pores';
-import { runSkinSignals } from './skinSignals';
 import { scoreTexture } from './texture';
 
 export interface AnalysisResult {
@@ -14,11 +14,19 @@ export interface AnalysisResult {
    * PhotoHighlightOverlay. */
   highlights?: Highlight[];
   source: AnalysisSource;
-  /** Present only when source !== 'model' — the actual error from whichever
-   * model failed, so a failure is diagnosable from the device itself
-   * without needing adb/logcat access. */
-  errors?: { signals?: string; acne?: string };
+  /** Present only when source !== 'model' — the actual error from
+   * whichever part of the pipeline failed, so a failure is diagnosable
+   * from the device itself without needing adb/logcat access. */
+  errors?: { photoDecode?: string; acne?: string };
 }
+
+// Classical-CV signals (texture/pores/hydration/discoloration) all run
+// against the same decoded photo — resolution chosen for reasonable
+// texture/pore detail at low compute cost, not tied to any model's
+// required input size (there's no ML model behind these anymore — see
+// constants/models.ts for why).
+const ANALYSIS_INPUT_SIZE = 256;
+const ANALYSIS_RESIZE_SHORT_SIDE = 288;
 
 function clamp0100(v: number): number {
   return Math.max(0, Math.min(100, Math.round(v)));
@@ -46,59 +54,61 @@ function scoreFromDetections(detections: Highlight[]): number {
 }
 
 /**
- * Runs both on-device models against a captured photo and maps their output
- * onto the app's 5 UI conditions. The mapping is many-to-one, not 1:1 — see
- * constants/models.ts's CONDITION_MAPPING_NOTE:
- *   darkSpots <- acne detector boxes
- *   discoloration <- skin-signals "sunDamage"
- *   texture <- skin-signals "structure"
- *   pores <- skin-signals "structure" (same signal, reused)
- *   hydration <- skin-signals "hydration"
- *   overall <- average of the 5 above
+ * Runs the analysis pipeline against a captured photo:
+ *   - darkSpots comes from the on-device YOLOv8s acne/lesion detector
+ *     (a real ML model — see constants/models.ts).
+ *   - texture, pores, hydration, and discoloration are computed by
+ *     classical-CV pixel math (block-local luminance variance,
+ *     gradient-magnitude, specular-highlight ratio, hue-variance
+ *     respectively — see each file's doc comment) run against the same
+ *     decoded photo, not a model. This isn't a fallback path; it's the
+ *     actual method for these four conditions, because the source repo's
+ *     ML models for them are either broken (missing external weight data)
+ *     or produce uncalibrated output with no documented scale — see
+ *     constants/models.ts for the full explanation.
+ *   - overall is the average of all 5.
  *
- * The two models are independent: each is wrapped so one failing doesn't
- * block the other, and whichever fails falls back to the flat heuristic
- * placeholder this pipeline used before real models were wired in (see
- * texture.ts / darkSpots.ts / discoloration.ts / hydration.ts / pores.ts).
- * `source` tells the caller which case happened so the UI can say so
- * honestly instead of presenting a heuristic guess as a real analysis.
+ * The two independent things that can actually fail here (decoding the
+ * photo, and the acne detector) are wrapped so one failing doesn't block
+ * the other; whichever fails falls back to a flat heuristic placeholder,
+ * and `source` tells the caller which case happened so the UI can say so
+ * honestly instead of presenting a placeholder as a real result.
  */
 export async function analyzeCapture(uri: string): Promise<AnalysisResult> {
-  const [signalsResult, acneResult] = await Promise.allSettled([runSkinSignals(uri), runAcneDetector(uri)]);
+  const [photoResult, acneResult] = await Promise.allSettled([
+    resizeAndCenterCrop(uri, ANALYSIS_INPUT_SIZE, ANALYSIS_RESIZE_SHORT_SIDE),
+    runAcneDetector(uri),
+  ]);
 
-  const signalsOk = signalsResult.status === 'fulfilled';
+  const photoOk = photoResult.status === 'fulfilled';
   const acneOk = acneResult.status === 'fulfilled';
 
-  if (!signalsOk) {
-    console.warn('[analysis] skin-signals model failed, falling back to heuristic placeholder', signalsResult.reason);
+  if (!photoOk) {
+    console.warn('[analysis] photo decode failed, classical-CV signals fall back to heuristic placeholder', photoResult.reason);
   }
   if (!acneOk) {
     console.warn('[analysis] acne detector failed, falling back to heuristic placeholder', acneResult.reason);
   }
 
-  const discoloration = signalsOk
-    ? clamp0100(signalsResult.value.sunDamage * 100)
-    : scoreDiscoloration(new Uint8Array(0), 0, 0);
-  const texture = signalsOk
-    ? clamp0100(signalsResult.value.structure * 100)
-    : scoreTexture(new Uint8Array(0), 0, 0);
-  const pores = signalsOk
-    ? clamp0100(signalsResult.value.structure * 100)
-    : scorePores(new Uint8Array(0), 0, 0);
-  const hydration = signalsOk
-    ? clamp0100(signalsResult.value.hydration * 100)
-    : scoreHydration(new Uint8Array(0), 0, 0);
+  const pixels = photoOk ? photoResult.value.data : new Uint8Array(0);
+  const width = photoOk ? photoResult.value.width : 0;
+  const height = photoOk ? photoResult.value.height : 0;
+
+  const texture = scoreTexture(pixels, width, height);
+  const pores = scorePores(pixels, width, height);
+  const hydration = scoreHydration(pixels, width, height);
+  const discoloration = scoreDiscoloration(pixels, width, height);
   const darkSpots = acneOk ? scoreFromDetections(acneResult.value) : scoreDarkSpots(new Uint8Array(0), 0, 0);
 
   const overall = clamp0100((darkSpots + discoloration + texture + hydration + pores) / 5);
 
-  const source: AnalysisSource = signalsOk && acneOk ? 'model' : signalsOk || acneOk ? 'partial' : 'heuristic';
+  const source: AnalysisSource = photoOk && acneOk ? 'model' : photoOk || acneOk ? 'partial' : 'heuristic';
 
   const errors =
     source === 'model'
       ? undefined
       : {
-          signals: signalsOk ? undefined : describeError(signalsResult.reason),
+          photoDecode: photoOk ? undefined : describeError(photoResult.reason),
           acne: acneOk ? undefined : describeError(acneResult.reason),
         };
 
