@@ -14,10 +14,24 @@ export interface AnalysisResult {
    * PhotoHighlightOverlay. */
   highlights?: Highlight[];
   source: AnalysisSource;
+  /** Present only when source !== 'model' — the actual error from whichever
+   * model failed, so a failure is diagnosable from the device itself
+   * without needing adb/logcat access. */
+  errors?: { signals?: string; acne?: string };
 }
 
 function clamp0100(v: number): number {
   return Math.max(0, Math.min(100, Math.round(v)));
+}
+
+function describeError(reason: unknown): string {
+  if (reason instanceof Error) return reason.message;
+  if (typeof reason === 'string') return reason;
+  try {
+    return JSON.stringify(reason);
+  } catch {
+    return String(reason);
+  }
 }
 
 /**
@@ -80,9 +94,18 @@ export async function analyzeCapture(uri: string): Promise<AnalysisResult> {
 
   const source: AnalysisSource = signalsOk && acneOk ? 'model' : signalsOk || acneOk ? 'partial' : 'heuristic';
 
+  const errors =
+    source === 'model'
+      ? undefined
+      : {
+          signals: signalsOk ? undefined : describeError(signalsResult.reason),
+          acne: acneOk ? undefined : describeError(acneResult.reason),
+        };
+
   return {
     scores: { overall, darkSpots, discoloration, texture, hydration, pores },
     highlights: acneOk ? acneResult.value : undefined,
     source,
+    errors,
   };
 }

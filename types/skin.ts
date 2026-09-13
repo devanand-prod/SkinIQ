@@ -56,6 +56,9 @@ export interface ScanRecord {
    * empty array = it ran and found zero — these are not the same thing. */
   highlights?: Highlight[];
   source?: AnalysisSource;
+  /** Present only when source !== 'model' — the raw error from whichever
+   * model failed, kept so a failure is diagnosable from the device itself. */
+  errors?: { signals?: string; acne?: string };
 }
 
 export function tierForScore(score: number): Tier {

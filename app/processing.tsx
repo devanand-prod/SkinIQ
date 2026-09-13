@@ -44,6 +44,7 @@ export default function ProcessingScreen() {
         photoUri,
         highlights: result.highlights,
         source: result.source,
+        errors: result.errors,
       });
       if (cancelled) return;
 

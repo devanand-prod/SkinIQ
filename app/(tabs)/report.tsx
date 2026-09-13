@@ -59,6 +59,18 @@ export default function ReportScreen() {
                 <Text style={{ fontFamily: fonts.uiMedium, color: colors.clay, fontSize: 13, lineHeight: 18 }}>
                   {bannerText}
                 </Text>
+                {/* TODO: temporary diagnostic while wiring up the model pipeline —
+                    remove once on-device inference is confirmed reliable. */}
+                {latest.errors?.signals && (
+                  <Text style={{ fontFamily: fonts.ui, color: colors.clay, fontSize: 11, marginTop: 8 }}>
+                    skin-signals: {latest.errors.signals}
+                  </Text>
+                )}
+                {latest.errors?.acne && (
+                  <Text style={{ fontFamily: fonts.ui, color: colors.clay, fontSize: 11, marginTop: 4 }}>
+                    acne detector: {latest.errors.acne}
+                  </Text>
+                )}
               </View>
             )}
 
