@@ -1,0 +1,62 @@
+{
+  "expo": {
+    "name": "SkinIQ",
+    "slug": "skiniq",
+    "scheme": "skiniq",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icons/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/icons/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F2ECE3"
+    },
+    "assetBundlePatterns": ["assets/fonts/*", "assets/icons/*"],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.yourcompany.skiniq",
+      "infoPlist": {
+        "NSCameraUsageDescription": "SkinIQ uses your camera to take a selfie for on-device skin analysis. Photos are analyzed on your device and are not required to be uploaded anywhere.",
+        "NSPhotoLibraryUsageDescription": "SkinIQ can use a photo from your library instead of the camera for skin analysis.",
+        "NSPhotoLibraryAddUsageDescription": "SkinIQ can save your scan photos to your library so you can track progress over time."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icons/adaptive-icon.png",
+        "backgroundColor": "#F2ECE3"
+      },
+      "package": "com.yourcompany.skiniq",
+      "compileSdkVersion": 34,
+      "targetSdkVersion": 34,
+      "minSdkVersion": 24,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_IMAGES"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "SkinIQ uses your camera to take a selfie for on-device skin analysis."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "SkinIQ can use a photo from your library instead of the camera for skin analysis."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "YOUR_EAS_PROJECT_ID"
+      }
+    }
+  }
+}
