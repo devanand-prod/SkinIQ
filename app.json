@@ -15,7 +15,7 @@
     "assetBundlePatterns": ["assets/fonts/*", "assets/icons/*", "assets/models/*"],
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.yourcompany.skiniq",
+      "bundleIdentifier": "com.devanand.skiniq",
       "infoPlist": {
         "NSCameraUsageDescription": "SkinIQ uses your camera to take a selfie for on-device skin analysis. Photos are analyzed on your device and are not required to be uploaded anywhere.",
         "NSPhotoLibraryUsageDescription": "SkinIQ can use a photo from your library instead of the camera for skin analysis.",
@@ -27,7 +27,7 @@
         "foregroundImage": "./assets/icons/adaptive-icon.png",
         "backgroundColor": "#F2ECE3"
       },
-      "package": "com.yourcompany.skiniq",
+      "package": "com.devanand.skiniq",
       "compileSdkVersion": 34,
       "targetSdkVersion": 34,
       "minSdkVersion": 24,
@@ -55,7 +55,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "YOUR_EAS_PROJECT_ID"
+        "projectId": "dffee050-5058-45c2-9ce9-d98aceb6f501"
       }
     }
   }
