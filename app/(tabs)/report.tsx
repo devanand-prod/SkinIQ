@@ -1,17 +1,20 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import { Image, ScrollView, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { MetricBar } from '../../components/MetricBar';
+import { PhotoHighlightOverlay } from '../../components/PhotoHighlightOverlay';
 import { ScoreRing } from '../../components/ScoreRing';
+import { analysisSourceCopy } from '../../constants/copy';
+import { colors, fonts, radii, spacing } from '../../constants/theme';
 import { getScanHistory } from '../../lib/storage/scanHistory';
-import { colors, fonts, spacing } from '../../constants/theme';
 import { CONDITION_KEYS } from '../../types/skin';
 import type { ScanRecord } from '../../types/skin';
 
 export default function ReportScreen() {
   const [latest, setLatest] = useState<ScanRecord | null>(null);
+  const { width: screenWidth } = useWindowDimensions();
 
   useFocusEffect(
     useCallback(() => {
@@ -24,6 +27,10 @@ export default function ReportScreen() {
       };
     }, [])
   );
+
+  const photoWidth = screenWidth - spacing.lg * 2;
+  const photoHeight = photoWidth * (4 / 3);
+  const bannerText = latest?.source ? analysisSourceCopy[latest.source] : null;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.paper }}>
@@ -40,6 +47,41 @@ export default function ReportScreen() {
           </View>
         ) : (
           <>
+            {bannerText && (
+              <View
+                style={{
+                  backgroundColor: colors.claySoft,
+                  borderRadius: radii.md,
+                  padding: spacing.md,
+                  marginBottom: spacing.lg,
+                }}
+              >
+                <Text style={{ fontFamily: fonts.uiMedium, color: colors.clay, fontSize: 13, lineHeight: 18 }}>
+                  {bannerText}
+                </Text>
+              </View>
+            )}
+
+            {latest.photoUri && (
+              <View
+                style={{
+                  width: photoWidth,
+                  height: photoHeight,
+                  borderRadius: radii.lg,
+                  overflow: 'hidden',
+                  marginBottom: spacing.xl,
+                  backgroundColor: colors.paperDeep,
+                }}
+              >
+                <Image
+                  source={{ uri: latest.photoUri }}
+                  style={{ width: photoWidth, height: photoHeight }}
+                  resizeMode="cover"
+                />
+                <PhotoHighlightOverlay highlights={latest.highlights} width={photoWidth} height={photoHeight} />
+              </View>
+            )}
+
             <View style={{ alignItems: 'center', marginBottom: spacing.xl }}>
               <ScoreRing score={latest.scores.overall} />
             </View>

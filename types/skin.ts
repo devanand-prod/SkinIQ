@@ -28,11 +28,34 @@ export interface ScanScores {
   pores: number;
 }
 
+/** A single detected box from the acne/lesion model, in normalized [0,1]
+ * rect space against the original captured photo. */
+export interface Highlight {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  confidence: number;
+  classId: number;
+}
+
+/**
+ * How a scan's scores were produced:
+ * - 'model'     both on-device models ran successfully
+ * - 'partial'   one model ran, the other fell back to a flat heuristic
+ * - 'heuristic' both models failed/unavailable — every score is a placeholder
+ */
+export type AnalysisSource = 'model' | 'partial' | 'heuristic';
+
 export interface ScanRecord {
   id: string;
   timestamp: string;
   scores: ScanScores;
   photoUri?: string;
+  /** Dark-spot detection boxes. Undefined = detector didn't run at all;
+   * empty array = it ran and found zero — these are not the same thing. */
+  highlights?: Highlight[];
+  source?: AnalysisSource;
 }
 
 export function tierForScore(score: number): Tier {

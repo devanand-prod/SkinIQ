@@ -1,4 +1,4 @@
-import type { ConditionKey, Tier } from '../types/skin';
+import type { AnalysisSource, ConditionKey, Tier } from '../types/skin';
 
 export const APP_NAME = 'SkinIQ';
 
@@ -78,6 +78,14 @@ export const routineTips: string[] = [
   'Pat a hydrating toner or essence into damp skin so it absorbs before your moisturizer.',
   'Change your pillowcase weekly to cut down on overnight buildup against your skin.',
 ];
+
+/** Shown as a banner on the report screen so a fallback never gets
+ * presented as if it were a real analysis. */
+export const analysisSourceCopy: Record<AnalysisSource, string | null> = {
+  model: null,
+  partial: 'Partial analysis — one signal could not be read from this photo, so it is estimated.',
+  heuristic: 'These are placeholder results — on-device analysis was unavailable for this scan.',
+};
 
 export interface ConsentItem {
   id: string;

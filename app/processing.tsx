@@ -34,15 +34,16 @@ export default function ProcessingScreen() {
     let cancelled = false;
 
     async function run() {
-      // analyzeCapture is currently stubbed — see lib/analysis/index.ts.
-      const scores = await analyzeCapture(photoUri ?? '');
+      const result = await analyzeCapture(photoUri ?? '');
       if (cancelled) return;
 
       await saveScanRecord({
         id: makeScanId(),
         timestamp: new Date().toISOString(),
-        scores,
+        scores: result.scores,
         photoUri,
+        highlights: result.highlights,
+        source: result.source,
       });
       if (cancelled) return;
 

@@ -12,7 +12,7 @@
       "resizeMode": "contain",
       "backgroundColor": "#F2ECE3"
     },
-    "assetBundlePatterns": ["assets/fonts/*", "assets/icons/*"],
+    "assetBundlePatterns": ["assets/fonts/*", "assets/icons/*", "assets/models/*"],
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.yourcompany.skiniq",
