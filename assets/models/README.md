@@ -1,17 +1,21 @@
-# Model weights (not committed to this placeholder state)
+# Model weights
 
-This directory needs two files before the app will run real inference:
+Both files are committed here (~44MB combined, well under GitHub's limits):
 
 - `skin_signals.onnx` — EfficientNet-B0, ~0.6MB
-  https://huggingface.co/mufasabrownie/glowlytics-skin-models/resolve/main/skin_signals.onnx
 - `acne_detector.onnx` — YOLOv8s, ~43MB
-  https://huggingface.co/mufasabrownie/glowlytics-skin-models/resolve/main/acne_detector.onnx
 
-Both are MIT-licensed. Download them and place them here with those exact
-filenames — `constants/models.ts` references them by static `require()`
-path, which Metro needs to resolve at bundle time. Without these two files,
-`expo export` / `expo prebuild` / `eas build` will fail to bundle.
+Source (MIT-licensed): https://huggingface.co/mufasabrownie/glowlytics-skin-models
 
-Once they're here, `lib/analysis/skinSignals.ts` and
-`lib/analysis/acneDetector.ts` will pick them up automatically — no code
-changes needed.
+`constants/models.ts` references these by static `require()` path — Metro
+needs them present at bundle time. If you ever need to re-download them:
+
+```
+curl -L -o skin_signals.onnx https://huggingface.co/mufasabrownie/glowlytics-skin-models/resolve/main/skin_signals.onnx
+curl -L -o acne_detector.onnx https://huggingface.co/mufasabrownie/glowlytics-skin-models/resolve/main/acne_detector.onnx
+```
+
+Note: committing binary model weights to git means every clone downloads
+this ~44MB, and any future model update adds another copy to history
+rather than replacing it. If that becomes a problem, consider moving these
+to Git LFS.

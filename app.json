@@ -12,7 +12,11 @@
       "resizeMode": "contain",
       "backgroundColor": "#F2ECE3"
     },
-    "assetBundlePatterns": ["assets/fonts/*", "assets/icons/*", "assets/models/*"],
+    "assetBundlePatterns": [
+      "assets/fonts/*",
+      "assets/icons/*",
+      "assets/models/*"
+    ],
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.devanand.skiniq",
@@ -28,9 +32,6 @@
         "backgroundColor": "#F2ECE3"
       },
       "package": "com.devanand.skiniq",
-      "compileSdkVersion": 34,
-      "targetSdkVersion": 34,
-      "minSdkVersion": 24,
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
@@ -50,6 +51,16 @@
         "expo-image-picker",
         {
           "photosPermission": "SkinIQ can use a photo from your library instead of the camera for skin analysis."
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 34,
+            "targetSdkVersion": 34,
+            "minSdkVersion": 24
+          }
         }
       ]
     ],
